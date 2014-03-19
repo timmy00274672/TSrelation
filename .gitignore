@@ -6,7 +6,9 @@ lib-cov
 *.out
 *.pid
 *.gz
+temp.*
 
+dbLink.js
 pids
 logs
 results
