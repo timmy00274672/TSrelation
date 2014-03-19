@@ -6,21 +6,68 @@ var fs = require('fs'),
     connection = require('./dbLink.js');
 
 //constant
-var START_YEAR = 75,
-    END_YEAR = 76;
+var START_YEAR = 80,
+    END_YEAR = 85,
+    SEARCHING_INTERVAL = 5;
 
-var resultArray = []; //{TID,TName,SName}
+var resultArray = [], //{TID,TName,SName}
+    AMOUNT;
 
-var sql2 = format("SELECT PersonId, Name FROM person LIMIT 5476,3");
-connection.query(sql2, function(err, teachers) {
-    if (err) {
-        console.log(err);
-        return;
+async.series([
+
+    function(callback) {
+        //calculate the #teachers
+        var sql1 = "SELECT COUNT(*) AS count FROM person";
+        connection.query(sql1, function(err, count) {
+            if (err) callback(err);
+            else {
+                AMOUNT = count[0].count;
+                // AMOUNT = 10;
+                callback(null, "counting is successed");
+            }
+        });
+    },
+    function(callback) {
+        //query each sector of teachers seriesly
+        var sectorBeginning = 0,
+            teachersInSector = [];
+
+        async.whilst(function() {
+            return sectorBeginning <= AMOUNT;
+        }, function(callback) {
+            var sql2 = format("SELECT PersonId, Name FROM person LIMIT %d,%d", sectorBeginning, sectorBeginning + SEARCHING_INTERVAL);
+            connection.query(sql2, function(err, teachers) {
+                if (err) {
+                    console.log(err);
+                    callback(err);
+                } else {
+                    async.each(teachers, searchForCertainTeacher, function(err) {
+                        // fs.writeFile('temp.txt', JSON.stringify(resultArray));
+                        if (err) callback(err);
+                        else {
+                            var msg = format("%d,%d is finished", sectorBeginning, sectorBeginning + SEARCHING_INTERVAL);
+                            sectorBeginning += SEARCHING_INTERVAL;
+                            console.log(msg);
+                            callback(null, msg);
+                        }
+                    });
+                }
+            });
+            //sectorBeginning+=SEARCHING_INTERVAL;
+        }, function(err) {
+            //all teachers data should be saved in resultArray.
+            if (err) callback(err);
+            else callback(null, "all teachers finished");
+        });
+
     }
-    async.each(teachers, searchForCertainTeacher, function(err) {
-        fs.writeFile('temp.txt', JSON.stringify(resultArray));
-        return;
-    });
+], function(err, result) {
+    //all teachers in db is finished.
+    //should do output
+    if (err) return;
+    fs.writeFile('temp.txt', JSON.stringify(resultArray));
+    console.log("ALL FINISH");
+    return;
 });
 
 /*
