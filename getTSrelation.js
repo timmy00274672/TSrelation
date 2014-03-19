@@ -8,7 +8,7 @@ var fs = require('fs'),
 //constant
 var START_YEAR = 80,
     END_YEAR = 85,
-    SEARCHING_INTERVAL = 5;
+    SEARCHING_INTERVAL = 20;
 
 var resultArray = [], //{TID,TName,SName}
     AMOUNT;
@@ -22,7 +22,7 @@ async.series([
             if (err) callback(err);
             else {
                 AMOUNT = count[0].count;
-                // AMOUNT = 10;
+                // AMOUNT = 1105;
                 callback(null, "counting is successed");
             }
         });
@@ -35,7 +35,7 @@ async.series([
         async.whilst(function() {
             return sectorBeginning <= AMOUNT;
         }, function(callback) {
-            var sql2 = format("SELECT PersonId, Name FROM person LIMIT %d,%d", sectorBeginning, sectorBeginning + SEARCHING_INTERVAL);
+            var sql2 = format("SELECT PersonId, Name FROM person LIMIT %d,%d", sectorBeginning, SEARCHING_INTERVAL);
             connection.query(sql2, function(err, teachers) {
                 if (err) {
                     console.log(err);
@@ -46,9 +46,24 @@ async.series([
                         if (err) callback(err);
                         else {
                             var msg = format("%d,%d is finished", sectorBeginning, sectorBeginning + SEARCHING_INTERVAL);
-                            sectorBeginning += SEARCHING_INTERVAL;
                             console.log(msg);
-                            callback(null, msg);
+                            sectorBeginning += SEARCHING_INTERVAL;
+                            if (resultArray.length != 0) {
+                                msg += format("length = %d", resultArray.length);
+                                var insertQuery = format("INSERT INTO ST (TID,TName,SName) VALUES %s;",
+                                    resultArray.map(function(r) {
+                                        return format("(%d,'%s','%s')", r.TID, r.TName, r.SName);
+                                    }).join(","));
+                                query(insertQuery, function(err) {
+                                    if (err) callback(err);
+                                    else callback(null, msg);
+                                });
+                                resultArray = [];
+
+                            } else {
+                                callback(null, msg);
+                            }
+
                         }
                     });
                 }
@@ -64,10 +79,14 @@ async.series([
 ], function(err, result) {
     //all teachers in db is finished.
     //should do output
-    if (err) return;
-    fs.writeFile('temp.txt', JSON.stringify(resultArray));
-    console.log("ALL FINISH");
-    return;
+    if (err) {
+        console.log(err);
+    } else {
+        fs.writeFile('temp.txt', JSON.stringify(resultArray));
+        console.log("ALL FINISH");
+    }
+    connection.end();
+
 });
 
 /*
@@ -84,9 +103,7 @@ var searchForCertainTeacher = function(teacher, callback) {
             return yr < END_YEAR;
         },
         function(callback) {
-            var command = format("'http://ndltd.ncl.edu.tw/cgi-bin/gs32/gsweb.cgi/ccd=FZUhN_/search' -H 'Cookie: ccd=pW7aOE; BIGipServerpool_query=426092736.20480.0000; style=ncl' -H 'Origin: http://ndltd.ncl.edu.tw' -H 'Accept-Encoding: gzip,deflate,sdch' -H 'Accept-Language: zh-TW,zh;q=0.8,en-US;q=0.6,en;q=0.4' -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.146 Safari/537.36' -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' -H 'Cache-Control: max-age=0' -H 'Referer: http://ndltd.ncl.edu.tw/cgi-bin/gs32/gsweb.cgi/ccd=FZUhN_/search?mode=cmd' -H 'Connection: keep-alive' --data 'qs0=%22%s%22.ad+AND+%22%d%22.yr&qf0=_hist_&gs32search.x=27&gs32search.y=6&displayonerecdisable=1&dbcode=nclcdr&action=&op=&h=&histlist=1%2C+2%2C+3&opt=m&_status_=search__v2' --compressed", encodeURIComponent(name), yr);
-
-
+            var command = format("'http://ndltd.ncl.edu.tw/cgi-bin/gs32/gsweb.cgi/ccd=cbfzRN/search' -H 'Pragma: no-cache' -H 'Origin: http://ndltd.ncl.edu.tw' -H 'Accept-Encoding: gzip,deflate,sdch' -H 'Accept-Language: en-US,en;q=0.8,zh-TW;q=0.6,zh;q=0.4' -H 'User-Agent: Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/33.0.1750.149 Safari/537.36' -H 'Content-Type: application/x-www-form-urlencoded' -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8' -H 'Cache-Control: no-cache' -H 'Referer: http://ndltd.ncl.edu.tw/cgi-bin/gs32/gsweb.cgi/ccd=cbfzRN/search?mode=cmd' -H 'Cookie: ccd=QbTwRO; __utma=69409167.1031489124.1395128227.1395128227.1395146922.2; __utmz=69409167.1395128227.1.1.utmcsr=google|utmccn=(organic)|utmcmd=organic|utmctr=(not%20provided); BIGipServerpool_query=426092736.20480.0000; style=ncl' -H 'Connection: keep-alive' --data 'qs0=%27%s%27.ad+AND+%27%d%27.yr&qf0=_hist_&gs32search.x=19&gs32search.y=9&displayonerecdisable=1&dbcode=nclcdr&action=&op=&h=&histlist=&opt=m&_status_=search__v2' --compressed", encodeURIComponent(name), yr);
 
             curl.run(command, function(err, result) {
                 if (err) throw err;
@@ -141,8 +158,14 @@ var searchForCertainTeacher = function(teacher, callback) {
         function(err) {
             //this teacher is searched over.
             // fs.writeFile('temp.txt', JSON.stringify(resultArray));
-            console.log("finish : ", teacher.Name);
+            console.log("finish : ", teacher.Name, resultArray.length);
             callback(err, format("%s finish", teacher.Name));
         }
     );
-}
+};
+
+var query = function(sql, callback) {
+    connection.query(sql, function(err, results) {
+        callback(err);
+    });
+};
